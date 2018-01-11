@@ -467,6 +467,9 @@ PIO_TF_AUTO_TEST_SUB_BEGIN nc_test_limited_time_dim
           wbuf(i,j,k,f) = wbuf(i,j,k,f) + (f - 1) * (dims(1) * dims(2) * dims(3))
           tmp_idx = (k - 1) * (ncols * nrows) + (j - 1) * nrows + i
           compdof(tmp_idx) = wbuf(i,j,k,1)
+          PIO_TF_LOG(0,*) "i ", i, "j ", j, "k ", k, "tmp_idx ", tmp_idx
+          PIO_TF_LOG(0,*) "compdof(tmp_idx) ", compdof(tmp_idx), "pio_tf_world_rank_ ", pio_tf_world_rank_
+          PIO_TF_LOG(1,*) "compdof(tmp_idx) ", compdof(tmp_idx), "pio_tf_world_rank_ ", pio_tf_world_rank_
         end do
       end do
     end do
@@ -474,6 +477,7 @@ PIO_TF_AUTO_TEST_SUB_BEGIN nc_test_limited_time_dim
 
   call PIO_initdecomp(pio_tf_iosystem_, PIO_TF_DATA_TYPE, dims, compdof, wr_iodesc)
   deallocate(compdof)
+  
 
   ! Set the decomposition for reading data - different from the write decomp
   call get_3d_col_decomp_info(pio_tf_world_rank_, pio_tf_world_sz_, dims, start, count, .false.)

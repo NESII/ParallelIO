@@ -40,7 +40,14 @@
 #define DIM_LEN 8
 
 /* This is the length of the map for each task. */
-#define EXPECTED_MAPLEN 2
+#define ELEM8 8   /* 8 elements per processor. */
+#define ELEM12 12 /* 12 elements per processor. */
+
+/* These are the decompositions used by each task. */
+PIO_Offset rank0_decomp[ELEM12] = {4, 5, 6, 7, 8, 9, 24, 25, 26, 27, 28, 29};
+PIO_Offset rank1_decomp[ELEM8] = {0, 1, 2, 3, 20, 21, 22, 23};
+PIO_Offset rank2_decomp[ELEM12] = {14, 15, 16, 17, 18, 19, 34, 35, 36, 37, 38, 39};
+PIO_Offset rank3_decomp[ELEM8] = {10, 11, 12, 13, 30, 31, 32, 33};
 
 /* The number of timesteps of data to write. */
 #define NUM_TIMESTEPS 2
@@ -68,25 +75,30 @@
  * @param pio_type the type that will be used for basetype.
  * @returns 0 for success, error code otherwise.
  **/
-int create_decomposition_3d(int ntasks, int my_rank, int iosysid, int pio_type, int *ioid)
+int create_decomposition_3d(int ntasks, int my_rank, int iosysid, int pio_type, int rearr,
+                            int *ioid)
 {
-    PIO_Offset elements_per_pe;     /* Array elements per processing unit. */
     int dim_len_3d[NDIM3] = {DIM_HGT_LEN, DIM_COL_LEN, DIM_ROW_LEN};
     int ret;
 
-    /* How many data elements per task? In this example we will end up
-     * with 10. */
-    elements_per_pe = (DIM_HGT_LEN * DIM_COL_LEN * DIM_ROW_LEN) / ntasks;
+    /* How many data elements per task? In this example ranks 0 and 2
+     * will have 12, and ranks 1 and 3 will have 8. */
+    PIO_Offset elements_per_pe = my_rank % 2 ? ELEM8 : ELEM12;
+    PIO_Offset *compdof;
 
-    PIO_Offset compdof[elements_per_pe];
-
-    /* Don't forget to add 1! */
-    for (int i = 0; i < elements_per_pe; i++)
-        compdof[i] = my_rank * elements_per_pe + i + 1;
+    /* Point to the correct decomposition array for this rank. */
+    if (my_rank == 0)
+        compdof = rank0_decomp;
+    else if (my_rank == 1)
+        compdof = rank1_decomp;
+    else if (my_rank == 2)
+        compdof = rank2_decomp;
+    else if (my_rank == 3)
+        compdof = rank3_decomp;
 
     /* Create the 3D PIO decomposition for this test. */
-    if ((ret = PIOc_InitDecomp(iosysid, pio_type, NDIM3, dim_len_3d, elements_per_pe,
-                               compdof, ioid, NULL, NULL, NULL)))
+    if ((ret = PIOc_init_decomp(iosysid, pio_type, NDIM3, dim_len_3d, elements_per_pe,
+                                compdof, ioid, rearr, NULL, NULL)))
         ERR(ret);
 
     return 0;
@@ -166,7 +178,7 @@ int test_darray_fill(int iosysid, int ioid, int pio_type, int num_flavors, int *
         for (int with_fillvalue = 0; with_fillvalue < NUM_FILLVALUE_PRESENT_TESTS; with_fillvalue++)
         {
             /* Create the filename. */
-            sprintf(filename, "data_%s_iotype_%d_pio_type_%d_with_fillvalue_%d.nc", TEST_NAME, flavor[fmt],
+            sprintf(filename, "data_%s_iotype_%d_pio_type_%d_fillvalue_%d.nc", TEST_NAME, flavor[fmt],
                     pio_type, with_fillvalue);
 
             /* Create the netCDF output file. */
@@ -686,123 +698,136 @@ int test_darray_fill(int iosysid, int ioid, int pio_type, int num_flavors, int *
 /*     return PIO_NOERR; */
 /* } */
 
-/* /\** */
-/*  * Test the decomp read/write functionality. */
-/*  * */
-/*  * @param iosysid the IO system ID. */
-/*  * @param ioid the ID of the decomposition. */
-/*  * @param num_flavors the number of IOTYPES available in this build. */
-/*  * @param flavor array of available iotypes. */
-/*  * @param my_rank rank of this task. */
-/*  * @param pio_type the type involved in this decompositon. */
-/*  * @param rearranger the rearranger in use. */
-/*  * @param test_comm the MPI communicator for this test. */
-/*  * @returns 0 for success, error code otherwise. */
-/*  *\/ */
-/* int test_decomp_read_write(int iosysid, int ioid, int num_flavors, int *flavor, int my_rank, */
-/*                            int pio_type, int rearranger, MPI_Comm test_comm) */
-/* { */
-/*     char filename[PIO_MAX_NAME + 1]; /\* Name for the output files. *\/ */
-/*     int ioid2;             /\* ID for decomposition we will create from file. *\/ */
-/*     char title_in[PIO_MAX_NAME + 1];   /\* Optional title. *\/ */
-/*     char history_in[PIO_MAX_NAME + 1]; /\* Optional history. *\/ */
-/*     int fortran_order_in; /\* Indicates fortran vs. c order. *\/ */
-/*     int ret;              /\* Return code. *\/ */
+/**
+ * Test the decomp read/write functionality.
+ *
+ * @param iosysid the IO system ID.
+ * @param ioid the ID of the decomposition.
+ * @param num_flavors the number of IOTYPES available in this build.
+ * @param flavor array of available iotypes.
+ * @param my_rank rank of this task.
+ * @param pio_type the type involved in this decompositon.
+ * @param rearranger the rearranger in use.
+ * @param test_comm the MPI communicator for this test.
+ * @returns 0 for success, error code otherwise.
+ */
+int test_decomp_read_write(int iosysid, int ioid, int num_flavors, int *flavor, int my_rank,
+                           int pio_type, int rearranger, MPI_Comm test_comm)
+{
+    char filename[PIO_MAX_NAME + 1]; /* Name for the output files. */
+    int ioid2;             /* ID for decomposition we will create from file. */
+    char title_in[PIO_MAX_NAME + 1];   /* Optional title. */
+    char history_in[PIO_MAX_NAME + 1]; /* Optional history. */
+    int fortran_order_in; /* Indicates fortran vs. c order. */
+    PIO_Offset expected_maplen = my_rank % 2 ? ELEM8 : ELEM12;
+    int ret;              /* Return code. */
 
-/*     /\* Use PIO to create the decomp file in each of the four */
-/*      * available ways. *\/ */
-/*     for (int fmt = 0; fmt < num_flavors; fmt++) */
-/*     { */
-/*         /\* Create the filename. *\/ */
-/*         sprintf(filename, "decomp_%s_iotype_%d.nc", TEST_NAME, flavor[fmt]); */
+    /* Use PIO to create the decomp file in each of the available
+     * ways. */
+    for (int fmt = 0; fmt < num_flavors; fmt++)
+    {
+        /* Create the filename. */
+        sprintf(filename, "decomp_%s_iotype_%d.nc", TEST_NAME, flavor[fmt]);
 
-/*         if ((ret = PIOc_write_nc_decomp(iosysid, filename, 0, ioid, NULL, NULL, 0))) */
-/*             return ret; */
+        if ((ret = PIOc_write_nc_decomp(iosysid, filename, 0, ioid, NULL, NULL, 0)))
+            ERR(ERR_WRONG);
 
-/*         /\* Read the data. *\/ */
-/*         if ((ret = PIOc_read_nc_decomp(iosysid, filename, &ioid2, test_comm, pio_type, */
-/*                                        title_in, history_in, &fortran_order_in))) */
-/*             return ret; */
+        /* Read the data. */
+        if ((ret = PIOc_read_nc_decomp(iosysid, filename, &ioid2, test_comm, pio_type,
+                                       title_in, history_in, &fortran_order_in)))
+            ERR(ERR_WRONG);
 
-/*         /\* Check the results. *\/ */
-/*         { */
-/*             iosystem_desc_t *ios; */
-/*             io_desc_t *iodesc; */
-/*             MPI_Datatype expected_basetype; */
+        /* Check the results. */
+        {
+            iosystem_desc_t *ios;
+            io_desc_t *iodesc;
+            MPI_Datatype expected_basetype;
 
-/*             switch (pio_type) */
-/*             { */
-/*             case PIO_BYTE: */
-/*                 expected_basetype = MPI_BYTE; */
-/*                 break; */
-/*             case PIO_CHAR: */
-/*                 expected_basetype = MPI_CHAR; */
-/*                 break; */
-/*             case PIO_SHORT: */
-/*                 expected_basetype = MPI_SHORT; */
-/*                 break; */
-/*             case PIO_INT: */
-/*                 expected_basetype = MPI_INT; */
-/*                 break; */
-/*             case PIO_FLOAT: */
-/*                 expected_basetype = MPI_FLOAT; */
-/*                 break; */
-/*             case PIO_DOUBLE: */
-/*                 expected_basetype = MPI_DOUBLE; */
-/*                 break; */
-/* #ifdef _NETCDF4 */
-/*             case PIO_UBYTE: */
-/*                 expected_basetype = MPI_UNSIGNED_CHAR; */
-/*                 break; */
-/*             case PIO_USHORT: */
-/*                 expected_basetype = MPI_UNSIGNED_SHORT; */
-/*                 break; */
-/*             case PIO_UINT: */
-/*                 expected_basetype = MPI_UNSIGNED; */
-/*                 break; */
-/*             case PIO_INT64: */
-/*                 expected_basetype = MPI_LONG_LONG; */
-/*                 break; */
-/*             case PIO_UINT64: */
-/*                 expected_basetype = MPI_UNSIGNED_LONG_LONG; */
-/*                 break; */
-/* #endif /\* _NETCDF4 *\/ */
-/*             default: */
-/*                 return ERR_WRONG; */
-/*             } */
+            switch (pio_type)
+            {
+            case PIO_BYTE:
+                expected_basetype = MPI_BYTE;
+                break;
+            case PIO_CHAR:
+                expected_basetype = MPI_CHAR;
+                break;
+            case PIO_SHORT:
+                expected_basetype = MPI_SHORT;
+                break;
+            case PIO_INT:
+                expected_basetype = MPI_INT;
+                break;
+            case PIO_FLOAT:
+                expected_basetype = MPI_FLOAT;
+                break;
+            case PIO_DOUBLE:
+                expected_basetype = MPI_DOUBLE;
+                break;
+#ifdef _NETCDF4
+            case PIO_UBYTE:
+                expected_basetype = MPI_UNSIGNED_CHAR;
+                break;
+            case PIO_USHORT:
+                expected_basetype = MPI_UNSIGNED_SHORT;
+                break;
+            case PIO_UINT:
+                expected_basetype = MPI_UNSIGNED;
+                break;
+            case PIO_INT64:
+                expected_basetype = MPI_LONG_LONG;
+                break;
+            case PIO_UINT64:
+                expected_basetype = MPI_UNSIGNED_LONG_LONG;
+                break;
+#endif /* _NETCDF4 */
+            default:
+                return ERR_WRONG;
+            }
 
-/*             /\* Get the IO system info. *\/ */
-/*             if (!(ios = pio_get_iosystem_from_id(iosysid))) */
-/*                 return pio_err(NULL, NULL, PIO_EBADID, __FILE__, __LINE__); */
+            /* Get the IO system info. */
+            if (!(ios = pio_get_iosystem_from_id(iosysid)))
+                ERR(ERR_WRONG);
+            
+            /* Get the IO desc, which describes the decomposition. */
+            if (!(iodesc = pio_get_iodesc_from_id(ioid2)))
+                ERR(ERR_WRONG);
+            if (iodesc->ioid != ioid2 || iodesc->maplen != expected_maplen || iodesc->ndims != NDIM3)
+                ERR(ERR_WRONG);
+            /* if (iodesc->nrecvs != 1) */
+            /*     return ERR_WRONG; */
+            /* if (iodesc->num_aiotasks != TARGET_NTASKS) */
+            /*     return ERR_WRONG; */
+            if (iodesc->ndof != expected_maplen)
+                ERR(ERR_WRONG);
+            /* if (iodesc->rearranger != rearranger || iodesc->maxregions != 1) */
+            /*     ERR(ERR_WRONG); */
+            if (iodesc->needsfill)
+                ERR(ERR_WRONG);
+            if (iodesc->mpitype != expected_basetype)
+                ERR(ERR_WRONG);
+            /* Add 1 here because compmap in decomp file is 1 based. */
+            for (int i = 0; i < expected_maplen; i++)
+            {
+                if (my_rank == 0 && iodesc->map[i] != rank0_decomp[i] + 1)
+                    ERR(ERR_WRONG);
+                else if (my_rank == 1 && iodesc->map[i] != rank1_decomp[i] + 1)
+                    ERR(ERR_WRONG);
+                else if (my_rank == 2 && iodesc->map[i] != rank2_decomp[i] + 1)
+                    ERR(ERR_WRONG);
+                else if (my_rank == 3 && iodesc->map[i] != rank3_decomp[i] + 1)
+                    ERR(ERR_WRONG);
+            }
+            
+            if (iodesc->dimlen[0] != DIM_HGT_LEN)
+                ERR(ERR_WRONG);
+        }
 
-/*             /\* Get the IO desc, which describes the decomposition. *\/ */
-/*             if (!(iodesc = pio_get_iodesc_from_id(ioid2))) */
-/*                 return pio_err(ios, NULL, PIO_EBADID, __FILE__, __LINE__); */
-/*             if (iodesc->ioid != ioid2 || iodesc->maplen != EXPECTED_MAPLEN || iodesc->ndims != NDIM) */
-/*                 return ERR_WRONG; */
-/*             /\* if (iodesc->nrecvs != 1) *\/ */
-/*             /\*     return ERR_WRONG; *\/ */
-/*             /\* if (iodesc->num_aiotasks != TARGET_NTASKS) *\/ */
-/*             /\*     return ERR_WRONG; *\/ */
-/*             if (iodesc->ndof != EXPECTED_MAPLEN) */
-/*                 return ERR_WRONG; */
-/*             if (iodesc->rearranger != rearranger || iodesc->maxregions != 1) */
-/*                 return ERR_WRONG; */
-/*             if (!iodesc->needsfill || iodesc->mpitype != expected_basetype) */
-/*                 return ERR_WRONG; */
-/*             /\* Don't forget to add 1!! *\/ */
-/*             if (iodesc->map[0] != my_rank + 1 || iodesc->map[1] != 0) */
-/*                 return ERR_WRONG; */
-/*             if (iodesc->dimlen[0] != DIM_LEN) */
-/*                 return ERR_WRONG; */
-/*         } */
-
-/*         /\* Free the PIO decomposition. *\/ */
-/*         if ((ret = PIOc_freedecomp(iosysid, ioid2))) */
-/*             ERR(ret); */
-/*     } */
-/*     return PIO_NOERR; */
-/* } */
+        /* Free the PIO decomposition. */
+        if ((ret = PIOc_freedecomp(iosysid, ioid2)))
+            ERR(ret);
+    }
+    return PIO_NOERR;
+}
 
 /* Run tests for darray functions. */
 int main(int argc, char **argv)
@@ -859,13 +884,13 @@ int main(int argc, char **argv)
             {
                 /* Decompose the data over the tasks. */
                 if ((ret = create_decomposition_3d(TARGET_NTASKS, my_rank, iosysid, test_type[t],
-                                                   &ioid)))
+                                                   rearranger[r], &ioid)))
                     return ret;
 
-                /* /\* Test decomposition read/write. *\/ */
-                /* if ((ret = test_decomp_read_write(iosysid, ioid, num_flavors, flavor, my_rank, */
-                /*                                   test_type[t], rearranger[r], test_comm))) */
-                /*     return ret; */
+                /* Test decomposition read/write. */
+                if ((ret = test_decomp_read_write(iosysid, ioid, num_flavors, flavor, my_rank,
+                                                  test_type[t], rearranger[r], test_comm)))
+                    return ret;
 
                 /* Run tests. */
                 if ((ret = test_darray_fill(iosysid, ioid, test_type[t], num_flavors, flavor,
