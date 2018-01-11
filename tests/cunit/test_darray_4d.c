@@ -20,16 +20,6 @@
 /* The name of this test. */
 #define TEST_NAME "test_darray_4d"
 
-/* Number of processors that will do IO. */
-#define NUM_IO_PROCS 1
-
-/* Number of computational components to create. */
-#define COMPONENT_COUNT 1
-
-/* The number of dimensions in the example data. In this test, we
- * are using three-dimensional data. */
-#define NDIM 1
-
 /* The number of dimensions in the example data. In this test, we are
  * using four-dimensional data and a three dimensional
  * decomposition. */
@@ -795,8 +785,11 @@ int test_decomp_read_write(int iosysid, int ioid, int num_flavors, int *flavor, 
                 ERR(ERR_WRONG);
             /* if (iodesc->nrecvs != 1) */
             /*     return ERR_WRONG; */
-            /* if (iodesc->num_aiotasks != TARGET_NTASKS) */
-            /*     return ERR_WRONG; */
+            if (rearranger == PIO_REARR_SUBSET && iodesc->num_aiotasks != TARGET_NTASKS)
+            {
+                printf("my_rank %d iodesc->num_aiotasks %d\n", my_rank, iodesc->num_aiotasks);
+                ERR(ERR_WRONG);
+            }
             if (iodesc->ndof != expected_maplen)
                 ERR(ERR_WRONG);
             if (iodesc->rearranger != rearranger)

@@ -1097,8 +1097,8 @@ int PIOc_read_nc_decomp(int iosysid, const char *filename, int *ioidp, MPI_Comm 
     if (!filename || !ioidp)
         return pio_err(ios, NULL, PIO_EINVAL, __FILE__, __LINE__);
 
-    LOG((1, "PIOc_read_nc_decomp filename = %s iosysid = %d pio_type = %d",
-         filename, iosysid, pio_type));
+    LOG((1, "PIOc_read_nc_decomp filename %s iosysid %d pio_type %d ios->num_iotasks %d",
+         filename, iosysid, pio_type, ios->num_iotasks));
 
     /* Get the communicator size and task rank. */
     if ((mpierr = MPI_Comm_size(comm, &size)))

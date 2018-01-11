@@ -421,6 +421,8 @@ int PIOc_InitDecomp(int iosysid, int pio_type, int ndims, const int *gdimlen, in
     /* Get IO system info. */
     if (!(ios = pio_get_iosystem_from_id(iosysid)))
         return pio_err(NULL, NULL, PIO_EBADID, __FILE__, __LINE__);
+    LOG((2, "ios->num_iotasks %d ios->async %d ios->ioproc %d", ios->num_iotasks, ios->async,
+         ios->ioproc));
 
     /* Caller must provide these. */
     if (!gdimlen || !compmap || !ioidp)
@@ -538,6 +540,8 @@ int PIOc_InitDecomp(int iosysid, int pio_type, int ndims, const int *gdimlen, in
                     iodesc->firstregion->start[i] = iostart[i];
                     iodesc->firstregion->count[i] = iocount[i];
                 }
+
+                /* The decomposition has to remember the number of IO tasks. */
                 iodesc->num_aiotasks = ios->num_iotasks;
             }
             else
