@@ -799,8 +799,10 @@ int test_decomp_read_write(int iosysid, int ioid, int num_flavors, int *flavor, 
             /*     return ERR_WRONG; */
             if (iodesc->ndof != expected_maplen)
                 ERR(ERR_WRONG);
-            /* if (iodesc->rearranger != rearranger || iodesc->maxregions != 1) */
-            /*     ERR(ERR_WRONG); */
+            if (iodesc->rearranger != rearranger)
+                ERR(ERR_WRONG);
+            if (iodesc->maxregions != 1)
+                ERR(ERR_WRONG);
             if (iodesc->needsfill)
                 ERR(ERR_WRONG);
             if (iodesc->mpitype != expected_basetype)
