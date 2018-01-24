@@ -601,6 +601,18 @@ int PIOc_InitDecomp(int iosysid, int pio_type, int ndims, const int *gdimlen, in
          iodesc->maxiobuflen));
     for (int j = 0; j < iodesc->llen; j++)
         LOG((3, "rindex[%d] = %lld", j, iodesc->rindex[j]));
+
+    /* Run this on all tasks if async is not in use, but only on
+     * non-IO tasks if async is in use. This writes the decomposition
+     * file. */
+    /* if (!ios->async || !ios->ioproc) */
+    /* { */
+    /*    char filename[NC_MAX_NAME + 1]; */
+    /*    char title[NC_MAX_NAME + 1]; */
+    /*    sprintf(filename, "pioc_decomp_%d_%d.nc", iosysid, iodesc->ioid); */
+    /*    sprintf(title, "Decomposition file for iosysid %d ioid %d", iosysid, iodesc->ioid); */
+    /*    PIOc_write_nc_decomp(iosysid, filename, 0, iodesc->ioid, title, NULL, 0); */
+    /* } */
 #endif /* PIO_ENABLE_LOGGING */
 
     /* This function only does something if pre-processor macro
